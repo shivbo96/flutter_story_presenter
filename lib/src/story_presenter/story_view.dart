@@ -120,6 +120,7 @@ class _FlutterStoryPresenterState extends State<FlutterStoryPresenter>
     }
     _animationController = AnimationController(
       vsync: this,
+      duration: _totalAudioDuration ?? Duration(seconds: 3)
     );
     currentIndex = widget.initialIndex;
     widget.flutterStoryController?.addListener(_storyControllerListener);
