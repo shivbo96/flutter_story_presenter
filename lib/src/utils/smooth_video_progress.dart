@@ -1,11 +1,12 @@
 library smooth_video_progress;
 
+import 'package:better_player/better_player.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:video_player/video_player.dart';
+import 'dart:math';
 
 /// A widget that provides a method of building widgets using an interpolated
-/// position value for [VideoPlayerController].
+/// position value for [BetterPlayerController].
 class SmoothVideoProgress extends HookWidget {
   const SmoothVideoProgress({
     super.key,
@@ -14,74 +15,68 @@ class SmoothVideoProgress extends HookWidget {
     this.child,
   });
 
-  /// The [VideoPlayerController] to build a progress widget for.
-  final VideoPlayerController controller;
+  /// The [BetterPlayerController] to track progress for.
+  final BetterPlayerController controller;
 
   /// The builder function.
-  ///
-  /// [progress] holds the interpolated current progress of the video. Use
-  /// [duration] (the total duration of the video) to calculate a relative value
-  /// for a slider for example for convenience.
-  /// [child] holds the widget you passed into the constructor of this widget.
-  /// Use that to optimize rebuilds.
   final Widget Function(BuildContext context, Duration progress,
       Duration duration, Widget? child) builder;
 
-  /// An optional child that will be passed to the [builder] function and helps
-  /// you optimize rebuilds.
+  /// An optional child that will be passed to the [builder] function.
   final Widget? child;
 
   @override
   Widget build(BuildContext context) {
-    final value = useValueListenable(controller);
-    final animationController = useAnimationController(
-        duration: value.duration, keys: [value.duration]);
+    final videoPlayerController = controller.videoPlayerController;
+    if (videoPlayerController == null) {
+      return builder(context, Duration.zero, Duration.zero, child);
+    }
 
-    final targetRelativePosition =
-        value.position.inMilliseconds / value.duration.inMilliseconds;
+    final position = useState(Duration.zero);
+    final duration = useState(Duration.zero);
+    final isInitialized = useState(false);
 
-    final currentPosition = Duration(
-        milliseconds:
-            (animationController.value * value.duration.inMilliseconds)
-                .round());
+    useEffect(() {
+      void listener(BetterPlayerEvent event) {
+        final value = videoPlayerController.value;
 
-    final offset = value.position - currentPosition;
+        // 🔹 1. Capture duration when player is initialized
+        if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
+          isInitialized.value = true;
+          if (value.duration != null && value.duration!.inMilliseconds > 0) {
+            duration.value = value.duration!;
+          }
+        }
 
-    useValueChanged(
-      value.position,
-      (_, __) {
-        final correct = value.isPlaying &&
-            offset.inMilliseconds > -500 &&
-            offset.inMilliseconds < -50;
-        final correction = const Duration(milliseconds: 500) - offset;
-        final targetPos =
-            correct ? animationController.value : targetRelativePosition;
-        final duration = correct ? value.duration + correction : value.duration;
+        // 🔹 2. Update progress on progress event
+        if (event.betterPlayerEventType == BetterPlayerEventType.progress) {
+          position.value = value.position;
 
-        animationController.duration = duration;
-        value.isPlaying
-            ? animationController.forward(from: targetPos)
-            : animationController.value = targetRelativePosition;
-        return true;
-      },
-    );
+          // 🔹 3. If duration is still zero, update it dynamically
+          if (duration.value == Duration.zero && value.duration != null) {
+            duration.value = value.duration!;
+          }
+        }
+      }
 
-    useValueChanged(
-      value.isPlaying,
-      (_, __) => value.isPlaying
-          ? animationController.forward(from: targetRelativePosition)
-          : animationController.stop(),
-    );
+      controller.addEventsListener(listener);
 
-    return AnimatedBuilder(
-      animation: animationController,
-      builder: (context, child) {
-        final millis =
-            animationController.value * value.duration.inMilliseconds;
+      return () {
+        controller.removeEventsListener(listener);
+      };
+    }, [controller]);
+
+    return TweenAnimationBuilder<Duration>(
+      duration: const Duration(milliseconds: 100), // Smooth transition
+      tween: Tween<Duration>(
+        begin: position.value,
+        end: position.value,
+      ),
+      builder: (context, animatedProgress, child) {
         return builder(
           context,
-          Duration(milliseconds: millis.round()),
-          value.duration,
+          animatedProgress,
+          duration.value,
           child,
         );
       },

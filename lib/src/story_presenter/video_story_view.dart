@@ -1,11 +1,6 @@
-import 'dart:io';
-
+import 'package:better_player/better_player.dart';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
-import '../models/story_item.dart';
-import '../story_presenter/story_view.dart';
-import '../utils/story_utils.dart';
-import '../utils/video_utils.dart';
+import 'package:flutter_story_presenter/flutter_story_presenter.dart';
 
 /// A widget that displays a video story view, supporting different video sources
 /// (network, file, asset) and optional thumbnail and error widgets.
@@ -14,114 +9,100 @@ class VideoStoryView extends StatefulWidget {
   final StoryItem storyItem;
 
   /// Callback function to notify when the video is loaded.
-  final OnVideoLoad? onVideoLoad;
+  final Function(BetterPlayerController)? onVideoLoad;
 
   /// In case of single video story
   final bool? looping;
 
   /// Creates a [VideoStoryView] widget.
-  const VideoStoryView(
-      {required this.storyItem, this.onVideoLoad, this.looping, super.key});
+  const VideoStoryView({required this.storyItem, this.onVideoLoad, this.looping, super.key});
 
   @override
   State<VideoStoryView> createState() => _VideoStoryViewState();
 }
 
 class _VideoStoryViewState extends State<VideoStoryView> {
-  VideoPlayerController? videoPlayerController;
+  late BetterPlayerController _betterPlayerController;
   bool hasError = false;
 
   @override
   void initState() {
-    _initialiseVideoPlayer();
     super.initState();
+    _initializeBetterPlayer();
   }
 
-  /// Initializes the video player controller based on the source of the video.
-  Future<void> _initialiseVideoPlayer() async {
+  /// Initializes the Better Player controller based on the source of the video.
+  Future<void> _initializeBetterPlayer() async {
     try {
       final storyItem = widget.storyItem;
+      BetterPlayerDataSource dataSource;
+
       if (storyItem.storyItemSource.isNetwork) {
-        // Initialize video controller for network source.
-        videoPlayerController =
-            await VideoUtils.instance.videoControllerFromUrl(
-          url: storyItem.url!,
-          cacheFile: storyItem.videoConfig?.cacheVideo,
-          videoPlayerOptions: storyItem.videoConfig?.videoPlayerOptions,
+        dataSource = BetterPlayerDataSource(
+          BetterPlayerDataSourceType.network,
+          storyItem.url!,
+          placeholder: storyItem.videoConfig?.placeholder,
+          cacheConfiguration: BetterPlayerCacheConfiguration(
+            useCache: storyItem.videoConfig?.cacheVideo ?? false,
+          ),
         );
       } else if (storyItem.storyItemSource.isFile) {
-        // Initialize video controller for file source.
-        videoPlayerController = VideoUtils.instance.videoControllerFromFile(
-          file: File(storyItem.url!),
-          videoPlayerOptions: storyItem.videoConfig?.videoPlayerOptions,
+        dataSource = BetterPlayerDataSource(
+          BetterPlayerDataSourceType.file,
+          storyItem.url!,
         );
       } else {
-        // Initialize video controller for asset source.
-        videoPlayerController = VideoUtils.instance.videoControllerFromAsset(
-          assetPath: storyItem.url!,
-          videoPlayerOptions: storyItem.videoConfig?.videoPlayerOptions,
+        dataSource = BetterPlayerDataSource(
+          BetterPlayerDataSourceType.memory,
+          storyItem.url!,
         );
       }
-      await videoPlayerController?.initialize();
-      widget.onVideoLoad?.call(videoPlayerController!);
-      await videoPlayerController?.play();
-      await videoPlayerController?.setLooping(widget.looping ?? false);
-      await videoPlayerController?.setVolume(storyItem.isMuteByDefault ? 0 : 1);
-    } catch (e) {
-      hasError = true;
-      debugPrint('$e');
-    }
-    setState(() {});
-  }
 
-  BoxFit get fit => widget.storyItem.videoConfig?.fit ?? BoxFit.cover;
+      _betterPlayerController = BetterPlayerController(
+        BetterPlayerConfiguration(
+          aspectRatio: storyItem.videoConfig?.aspectRatio ?? 9 / 16,
+          autoPlay: true,
+          looping: widget.looping ?? false,
+          showPlaceholderUntilPlay: true,
+          allowedScreenSleep: false,
+          placeholder: storyItem.videoConfig?.placeholder,
+          fit: storyItem.videoConfig?.fit ?? BoxFit.cover,
+          controlsConfiguration: BetterPlayerControlsConfiguration(
+              showControls: false, loadingWidget: widget.storyItem.videoConfig?.loadingWidget),
+        ),
+        betterPlayerDataSource: dataSource,
+      );
+
+      widget.onVideoLoad?.call(_betterPlayerController);
+    } catch (e) {
+      setState(() {
+        hasError = true;
+      });
+      debugPrint('Error initializing BetterPlayer: $e');
+    }
+  }
 
   @override
   void dispose() {
-    videoPlayerController?.dispose();
+    _betterPlayerController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
-      alignment: (fit == BoxFit.cover) ? Alignment.topCenter : Alignment.center,
-      fit: (fit == BoxFit.cover) ? StackFit.expand : StackFit.loose,
+      alignment: (widget.storyItem.videoConfig?.fit == BoxFit.cover) ? Alignment.topCenter : Alignment.center,
+      fit: (widget.storyItem.videoConfig?.fit == BoxFit.cover) ? StackFit.expand : StackFit.loose,
       children: [
-        if (widget.storyItem.videoConfig?.loadingWidget != null) ...{
-          widget.storyItem.videoConfig!.loadingWidget!,
-        } else if (widget.storyItem.thumbnail != null) ...{
-          // Display the thumbnail if provided.
-          widget.storyItem.thumbnail!,
-        },
-        if (widget.storyItem.errorWidget != null && hasError) ...{
-          // Display the error widget if an error occurred.
-          widget.storyItem.errorWidget!,
-        },
-        if (videoPlayerController != null) ...{
-          if (widget.storyItem.videoConfig?.useVideoAspectRatio ?? false) ...{
-            // Display the video with aspect ratio if specified.
-            AspectRatio(
-              aspectRatio: videoPlayerController!.value.aspectRatio,
-              child: VideoPlayer(
-                videoPlayerController!,
-              ),
-            )
-          } else ...{
-            // Display the video fitted to the screen.
-            FittedBox(
-              fit: widget.storyItem.videoConfig?.fit ?? BoxFit.cover,
-              alignment: Alignment.center,
-              child: SizedBox(
-                width: widget.storyItem.videoConfig?.width ??
-                    videoPlayerController!.value.size.width,
-                height: widget.storyItem.videoConfig?.height ??
-                    videoPlayerController!.value.size.height,
-                child: VideoPlayer(videoPlayerController!),
-              ),
-            )
-          },
-        }
+        // if (widget.storyItem.videoConfig?.loadingWidget != null) ...{
+        //   widget.storyItem.videoConfig!.loadingWidget!,
+        // } else if (widget.storyItem.thumbnail != null) ...{
+        //   widget.storyItem.thumbnail!,
+        // },
+        // if (widget.storyItem.errorWidget != null && hasError) ...{
+        //   widget.storyItem.errorWidget!,
+        // },
+        BetterPlayer(controller: _betterPlayerController),
       ],
     );
   }

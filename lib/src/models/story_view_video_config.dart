@@ -10,6 +10,8 @@ class StoryViewVideoConfig {
     this.loadingWidget,
     this.cacheVideo = false,
     this.useVideoAspectRatio = true,
+    this.aspectRatio,
+    this.placeholder,
     this.videoPlayerOptions,
   });
 
@@ -18,6 +20,12 @@ class StoryViewVideoConfig {
 
   /// Width for the Video
   final double? width;
+
+  /// aspectRatio for the Video
+  final double? aspectRatio;
+
+  /// placeholder for the Video
+  final Widget? placeholder;
 
   /// BoxFit settings for the Video
   final BoxFit? fit;
