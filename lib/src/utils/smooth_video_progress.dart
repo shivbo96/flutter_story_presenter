@@ -1,12 +1,10 @@
-library smooth_video_progress;
+import 'dart:ui';
 
 import 'package:better_player/better_player.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'dart:math';
 
-/// A widget that provides a method of building widgets using an interpolated
-/// position value for [BetterPlayerController].
 class SmoothVideoProgress extends HookWidget {
   const SmoothVideoProgress({
     super.key,
@@ -15,14 +13,15 @@ class SmoothVideoProgress extends HookWidget {
     this.child,
   });
 
-  /// The [BetterPlayerController] to track progress for.
   final BetterPlayerController controller;
 
-  /// The builder function.
-  final Widget Function(BuildContext context, Duration progress,
-      Duration duration, Widget? child) builder;
+  final Widget Function(
+    BuildContext context,
+    Duration progress,
+    Duration duration,
+    Widget? child,
+  ) builder;
 
-  /// An optional child that will be passed to the [builder] function.
   final Widget? child;
 
   @override
@@ -32,27 +31,76 @@ class SmoothVideoProgress extends HookWidget {
       return builder(context, Duration.zero, Duration.zero, child);
     }
 
-    final position = useState(Duration.zero);
     final duration = useState(Duration.zero);
-    final isInitialized = useState(false);
+    final lastActualPosition = useState(Duration.zero);
+    final lastUpdateTime = useState(DateTime.now());
+    final animatedProgress = useState(Duration.zero);
+    final isSeeking = useState(false);
+
+    final tickerProvider = useSingleTickerProvider();
+    final ticker = useMemoized(() {
+      return Ticker((elapsed) {
+        if (isSeeking.value) return;
+
+        final now = DateTime.now();
+        final elapsedSinceUpdate = now.difference(lastUpdateTime.value).inMilliseconds;
+
+        // Predict real current position
+        final predicted = lastActualPosition.value + Duration(milliseconds: elapsedSinceUpdate);
+
+        // Clamp to avoid going beyond duration
+        final target = duration.value != Duration.zero
+            ? predicted > duration.value
+                ? duration.value
+                : predicted
+            : predicted;
+
+        // Smoothly move toward predicted
+        final lerped = Duration(
+          milliseconds: lerpDouble(
+            animatedProgress.value.inMilliseconds.toDouble(),
+            target.inMilliseconds.toDouble(),
+            0.3, // Adjust smoothness factor here
+          )!
+              .round(),
+        );
+
+        animatedProgress.value = lerped;
+      });
+    });
+
+    useEffect(() {
+      ticker.start();
+      return () => ticker.dispose();
+    }, []);
 
     useEffect(() {
       void listener(BetterPlayerEvent event) {
         final value = videoPlayerController.value;
 
-        // 🔹 1. Capture duration when player is initialized
         if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
-          isInitialized.value = true;
           if (value.duration != null && value.duration!.inMilliseconds > 0) {
             duration.value = value.duration!;
           }
         }
 
-        // 🔹 2. Update progress on progress event
         if (event.betterPlayerEventType == BetterPlayerEventType.progress) {
-          position.value = value.position;
+          final newPos = value.position;
 
-          // 🔹 3. If duration is still zero, update it dynamically
+          final jump = (newPos - lastActualPosition.value).inMilliseconds.abs();
+          if (jump > 1500) {
+            // Likely a seek
+            isSeeking.value = true;
+            animatedProgress.value = newPos;
+
+            Future.delayed(const Duration(milliseconds: 100), () {
+              isSeeking.value = false;
+            });
+          }
+
+          lastActualPosition.value = newPos;
+          lastUpdateTime.value = DateTime.now();
+
           if (duration.value == Duration.zero && value.duration != null) {
             duration.value = value.duration!;
           }
@@ -60,27 +108,14 @@ class SmoothVideoProgress extends HookWidget {
       }
 
       controller.addEventsListener(listener);
-
-      return () {
-        controller.removeEventsListener(listener);
-      };
+      return () => controller.removeEventsListener(listener);
     }, [controller]);
 
-    return TweenAnimationBuilder<Duration>(
-      duration: const Duration(milliseconds: 100), // Smooth transition
-      tween: Tween<Duration>(
-        begin: position.value,
-        end: position.value,
-      ),
-      builder: (context, animatedProgress, child) {
-        return builder(
-          context,
-          animatedProgress,
-          duration.value,
-          child,
-        );
-      },
-      child: child,
+    return builder(
+      context,
+      animatedProgress.value,
+      duration.value,
+      child,
     );
   }
 }

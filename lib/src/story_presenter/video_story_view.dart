@@ -94,14 +94,6 @@ class _VideoStoryViewState extends State<VideoStoryView> {
       alignment: (widget.storyItem.videoConfig?.fit == BoxFit.cover) ? Alignment.topCenter : Alignment.center,
       fit: (widget.storyItem.videoConfig?.fit == BoxFit.cover) ? StackFit.expand : StackFit.loose,
       children: [
-        // if (widget.storyItem.videoConfig?.loadingWidget != null) ...{
-        //   widget.storyItem.videoConfig!.loadingWidget!,
-        // } else if (widget.storyItem.thumbnail != null) ...{
-        //   widget.storyItem.thumbnail!,
-        // },
-        // if (widget.storyItem.errorWidget != null && hasError) ...{
-        //   widget.storyItem.errorWidget!,
-        // },
         BetterPlayer(controller: _betterPlayerController),
       ],
     );

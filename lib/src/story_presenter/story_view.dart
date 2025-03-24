@@ -529,8 +529,6 @@ class _FlutterStoryPresenterState extends State<FlutterStoryPresenter>
                     ? SmoothVideoProgress(
                   controller: _currentVideoPlayer!,
                   builder: (context, progress, duration, child) {
-                    print('progress: $progress, duration: $duration');
-
                     final safeDurationMs = max(
                       (duration == null || duration == Duration.zero)
                           ? currentItem.duration.inMilliseconds
