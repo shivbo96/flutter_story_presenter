@@ -474,7 +474,6 @@ class _FlutterStoryPresenterState extends State<FlutterStoryPresenter>
               key: ValueKey('$currentIndex'),
               looping: widget.items.length == 1 && widget.restartOnCompleted,
               onVideoLoad: (videoPlayer) {
-                print('_currentVideoPlayer videoPlayer--> ${videoPlayer != null}');
                 isCurrentItemLoaded = true;
                 _currentVideoPlayer = videoPlayer;
                 _startStoryCountdown();
