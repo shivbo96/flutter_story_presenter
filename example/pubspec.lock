@@ -29,9 +29,9 @@ packages:
     dependency: transitive
     description:
       path: "."
-      ref: fix-android-and-ios
-      resolved-ref: "7bcd2a81ee6888dcbda05d7d49a07b379880119e"
-      url: "https://github.com/AndreDrummer/betterplayer/"
+      ref: main
+      resolved-ref: "0fda986ce318e4f91f0bfc98f257bd59126d276c"
+      url: "https://github.com/shivbo96/betterplayer/"
     source: git
     version: "0.0.84"
   boolean_selector:

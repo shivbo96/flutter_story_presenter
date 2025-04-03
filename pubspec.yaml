@@ -20,7 +20,8 @@ dependencies:
 
   better_player:
     git:
-      url: https://github.com/shivbo96/betterplayer.git
+      url: https://github.com/shivbo96/betterplayer/
+      ref: main
 
 dev_dependencies:
   flutter_test:
