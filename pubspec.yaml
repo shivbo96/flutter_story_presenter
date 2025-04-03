@@ -20,8 +20,7 @@ dependencies:
 
   better_player:
     git:
-      url: https://github.com/AndreDrummer/betterplayer/
-      ref: fix-android-and-ios
+      url: https://github.com/shivbo96/betterplayer.git
 
 dev_dependencies:
   flutter_test:
