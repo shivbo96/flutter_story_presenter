@@ -13,58 +13,44 @@ class SmoothVideoProgress extends HookWidget {
   });
 
   final BetterPlayerController controller;
-
   final Widget Function(
       BuildContext context,
       Duration progress,
       Duration duration,
       Widget? child,
       ) builder;
-
   final Widget? child;
 
   @override
   Widget build(BuildContext context) {
-    final videoPlayerController = controller.videoPlayerController;
-    if (videoPlayerController == null) {
+    final videoController = controller.videoPlayerController;
+    if (videoController == null) {
       return builder(context, Duration.zero, Duration.zero, child);
     }
 
     final duration = useState(Duration.zero);
-    final lastActualPosition = useState(Duration.zero);
-    final lastUpdateTime = useState(DateTime.now());
+    final lastRealPosition = useState(Duration.zero);
+    final lastRealTime = useState(DateTime.now());
     final animatedProgress = useState(Duration.zero);
 
     final isPlaying = useState(false);
     final isInitialized = useState(false);
     final isSeeking = useState(false);
-    final hasSnappedToStart = useState(false);
 
     final ticker = useMemoized(() {
-      return Ticker((elapsed) {
-        // Only animate if initialized AND playing AND not seeking
+      return Ticker((_) {
         if (!isInitialized.value || !isPlaying.value || isSeeking.value) return;
 
         final now = DateTime.now();
-        final elapsedSinceUpdate = now.difference(lastUpdateTime.value).inMilliseconds;
+        final elapsed = now.difference(lastRealTime.value);
+        final predicted = lastRealPosition.value + elapsed;
 
-        final predicted = lastActualPosition.value + Duration(milliseconds: elapsedSinceUpdate);
-
-        final target = duration.value != Duration.zero
-            ? (predicted > duration.value ? duration.value : predicted)
-            : predicted;
-
-        final lerped = Duration(
-          milliseconds: lerpDouble(
-            animatedProgress.value.inMilliseconds.toDouble(),
-            target.inMilliseconds.toDouble(),
-            hasSnappedToStart.value ? 0.3 : 1.0,
-          )!
-              .round(),
-        );
-
-        animatedProgress.value = lerped;
-        hasSnappedToStart.value = true;
+        if (duration.value != Duration.zero &&
+            predicted > duration.value) {
+          animatedProgress.value = duration.value;
+        } else {
+          animatedProgress.value = predicted;
+        }
       });
     }, []);
 
@@ -74,8 +60,10 @@ class SmoothVideoProgress extends HookWidget {
     }, []);
 
     useEffect(() {
-      void playerListener() {
-        final value = videoPlayerController.value;
+      void listener() {
+        final value = videoController.value;
+
+        isPlaying.value = value.isPlaying;
 
         if (value.initialized) {
           isInitialized.value = true;
@@ -84,28 +72,28 @@ class SmoothVideoProgress extends HookWidget {
           }
         }
 
-        isPlaying.value = value.isPlaying;
+        final currentPosition = value.position;
+        final jump = (currentPosition - lastRealPosition.value).inMilliseconds.abs();
 
-        final newPos = value.position;
-        final jump = (newPos - lastActualPosition.value).inMilliseconds.abs();
-
-        if (jump > 1500) {
+        if (jump > 1000) {
+          // Big jump: user probably seeked
           isSeeking.value = true;
-          animatedProgress.value = newPos;
-          hasSnappedToStart.value = true;
+          animatedProgress.value = currentPosition;
+          lastRealTime.value = DateTime.now();
+          lastRealPosition.value = currentPosition;
 
-          Future.delayed(const Duration(milliseconds: 100), () {
+          Future.delayed(const Duration(milliseconds: 120), () {
             isSeeking.value = false;
           });
+        } else {
+          lastRealTime.value = DateTime.now();
+          lastRealPosition.value = currentPosition;
         }
-
-        lastActualPosition.value = newPos;
-        lastUpdateTime.value = DateTime.now();
       }
 
-      videoPlayerController.addListener(playerListener);
-      return () => videoPlayerController.removeListener(playerListener);
-    }, [videoPlayerController]);
+      videoController.addListener(listener);
+      return () => videoController.removeListener(listener);
+    }, [videoController]);
 
     return builder(
       context,
